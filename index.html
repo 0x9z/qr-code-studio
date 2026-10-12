@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Privacy-first QR Code Generator and Scanner. Runs entirely in your browser with zero server calls.">
+  <title>QR Code Studio — Generator & Scanner</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- QR Code Styling Library -->
+  <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
+  
+  <!-- HTML5 QR Code Scanner -->
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/dist/html5-qrcode.min.js"></script>
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          animation: {
+            'fade-in': 'fadeIn 0.35s ease-out forwards',
+            'slide-up': 'slideUp 0.35s ease-out forwards',
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0' },
+              '100%': { opacity: '1' },
+            },
+            slideUp: {
+              '0%': { opacity: '0', transform: 'translateY(12px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    /* Custom styles beyond Tailwind */
+    :root {
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --secondary: #8b5cf6;
+      --bg-dark: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+    }
+    
+    body {
+      background: var(--bg-dark);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-dark); }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    
+    /* Range slider styling */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      background: #334155;
+      border-radius: 3px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      background: var(--primary);
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid #1e293b;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25);
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      background: var(--primary);
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid #1e293b;
+    }
+    
+    /* Color input styling */
+    input[type="color"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 40px;
+      height: 40px;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 2px;
+      cursor: pointer;
+      background: var(--card-bg);
+    }
+    input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    input[type="color"]::-webkit-color-swatch { border-radius: 6px; border: none; }
+    
+    /* Tab active state */
+    .tab-active {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35);
+    }
+    
+    /* Drop zone */
+    .drop-zone {
+      border: 2px dashed #475569;
+      transition: all 0.3s ease;
+    }
+    .drop-zone.dragover {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.08);
+      transform: scale(1.01);
+    }
+    
+    /* Toast notification */
+    .toast {
+      transform: translateX(120%);
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .toast.show {
+      transform: translateX(0);
+    }
+    
+    /* QR preview container */
+    .qr-preview-box {
+      background-image: 
+        linear-gradient(45deg, #f1f5f9 25%, transparent 25%), 
+        linear-gradient(-45deg, #f1f5f9 25%, transparent 25%), 
+        linear-gradient(45deg, transparent 75%, #f1f5f9 75%), 
+        linear-gradient(-45deg, transparent 75%, #f1f5f9 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+      background-color: #ffffff;
+    }
+    
+    /* Camera placeholder animation */
+    @keyframes scan-line {
+      0% { top: 0; opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { top: 100%; opacity: 0; }
+    }
+    .scan-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+      animation: scan-line 2.5s linear infinite;
+      pointer-events: none;
+    }
+    
+    /* Smooth transitions */
+    .transition-all-300 { transition: all 0.3s ease; }
+    
+    /* Button press effect */
+    .btn-press:active { transform: scale(0.97); }
+    
+    /* Focus ring */
+    .focus-ring:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
+    }
+    
+    /* Hide file input */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border-width: 0;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased">
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-3 pointer-events-none"></div>
+
+  <!-- Main Wrapper -->
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+    
+    <!-- Header -->
+    <header class="text-center mb-8 sm:mb-10 animate-fade-in">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-4 shadow-lg shadow-indigo-500/20">
+        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+        </svg>
+      </div>
+      <h1 class="text-3xl sm:text-4xl font-bold tracking-tight mb-2">
+        <span class="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">QR Code Studio</span>
+      </h1>
+      <p class="text-slate-400 text-sm sm:text-base max-w-md mx-auto">
+        Generate beautiful QR codes or scan them instantly. 
+        <span class="text-indigo-400 font-medium">100% private</span> — everything runs in your browser.
+      </p>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="flex justify-center mb-8 animate-slide-up" style="animation-delay: 0.1s">
+      <div class="bg-slate-800/80 backdrop-blur-sm p-1.5 rounded-2xl inline-flex shadow-xl shadow-black/20 border border-slate-700/50">
+        <button id="tabGenerate" onclick="switchTab('generate')" class="tab-active px-6 py-2.5 rounded-xl font-semibold text-sm transition-all-300 flex items-center gap-2 btn-press">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+          </svg>
+          Generate
+        </button>
+        <button id="tabScan" onclick="switchTab('scan')" class="px-6 py-2.5 rounded-xl font-semibold text-sm text-slate-400 hover:text-slate-200 transition-all-300 flex items-center gap-2 btn-press">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 22V12h6v10"/>
+          </svg>
+          Scan
+        </button>
+      </div>
+    </nav>
+
+    <!-- ==================== GENERATE SECTION ==================== -->
+    <section id="generateSection" class="animate-slide-up" style="animation-delay: 0.15s">
+      <div class="grid lg:grid-cols-5 gap-6">
+        
+        <!-- Controls Panel -->
+        <div class="lg:col-span-3 bg-slate-800/60 backdrop-blur-sm rounded-2xl p-5 sm:p-6 border border-slate-700/50 shadow-xl">
+          <h2 class="text-lg font-semibold mb-5 flex items-center gap-2 text-slate-200">
+            <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+            </svg>
+            Configuration
+          </h2>
+
+          <!-- Content Input -->
+          <div class="mb-5">
+            <label class="block text-sm font-medium text-slate-300 mb-2">Content <span class="text-slate-500 font-normal">— URL or text</span></label>
+            <div class="relative">
+              <textarea 
+                id="qrText" 
+                rows="3" 
+                class="w-full bg-slate-900/80 border border-slate-600 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus-ring resize-none transition-all-300"
+                placeholder="https://example.com or any text..."
+              >https://github.com</textarea>
+              <button onclick="clearText()" class="absolute top-2 right-2 p-1.5 text-slate-500 hover:text-slate-300 transition-colors rounded-lg hover:bg-slate-700/50" title="Clear text">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Color Pickers -->
+          <div class="grid grid-cols-2 gap-4 mb-5">
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2">Dot Color</label>
+              <div class="flex items-center gap-3 bg-slate-900/60 border border-slate-600 rounded-xl px-3 py-2.5">
+                <input type="color" id="dotColor" value="#6366f1" oninput="updateColorLabel('dotColor', 'dotColorHex'); updateQRCode();">
+                <span id="dotColorHex" class="text-sm font-mono text-slate-400 select-all">#6366f1</span>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2">Background</label>
+              <div class="flex items-center gap-3 bg-slate-900/60 border border-slate-600 rounded-xl px-3 py-2.5">
+                <input type="color" id="bgColor" value="#ffffff" oninput="updateColorLabel('bgColor', 'bgColorHex'); updateQRCode();">
+                <span id="bgColorHex" class="text-sm font-mono text-slate-400 select-all">#ffffff</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Margin Slider -->
+          <div class="mb-5">
+            <div class="flex justify-between items-center mb-2">
+              <label class="text-sm font-medium text-slate-300">Margin</label>
+              <span class="text-xs font-mono bg-slate-700 px-2 py-0.5 rounded-md text-indigo-300"><span id="marginValue">20</span>px</span>
+            </div>
+            <input 
+              type="range" 
+              id="marginSize" 
+              min="0" 
+              max="50" 
+              value="20" 
+              class="w-full"
+              oninput="document.getElementById('marginValue').textContent = this.value; updateQRCode();"
+            >
+          </div>
+
+          <!-- Logo Upload -->
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-slate-300 mb-2">Center Logo <span class="text-slate-500 font-normal">— optional</span></label>
+            <div class="relative group">
+              <input type="file" id="logoUpload" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/svg+xml" class="sr-only" onchange="handleLogoUpload(event)">
+              <label for="logoUpload" class="flex items-center justify-center w-full h-24 border-2 border-dashed border-slate-600 rounded-xl cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-all-300 group">
+                <div id="logoPlaceholder" class="text-center">
+                  <svg class="mx-auto h-8 w-8 text-slate-500 mb-1 group-hover:text-indigo-400 transition-colors" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M18 13.5V6.75A2.25 2.25 0 0015.75 4.5H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25h4.5"/>
+                  </svg>
+                  <span class="text-sm text-slate-400 group-hover:text-slate-300">Click to upload logo</span>
+                </div>
+                <img id="logoPreview" class="hidden h-16 w-16 object-contain rounded-lg" alt="Logo preview">
+              </label>
+              <button id="removeLogoBtn" onclick="removeLogo()" class="hidden absolute -top-2 -right-2 bg-rose-500 hover:bg-rose-600 text-white rounded-full p-1.5 shadow-lg transition-all-300 hover:scale-110" title="Remove logo">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            <p class="text-xs text-slate-500 mt-1.5">Supports PNG, JPG, WEBP, GIF, SVG. Max recommended: 200x200px.</p>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex gap-3">
+            <button onclick="downloadQR('png')" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 px-4 rounded-xl transition-all-300 flex items-center justify-center gap-2 btn-press shadow-lg shadow-indigo-600/20 hover:shadow-indigo-500/30">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M12 12.75V3m0 9.75l-3-3m3 3l3-3"/>
+              </svg>
+              PNG
+            </button>
+            <button onclick="downloadQR('svg')" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-semibold py-2.5 px-4 rounded-xl transition-all-300 flex items-center justify-center gap-2 btn-press shadow-lg shadow-purple-600/20 hover:shadow-purple-500/30">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M12 12.75V3m0 9.75l-3-3m3 3l3-3"/>
+              </svg>
+              SVG
+            </button>
+          </div>
+        </div>
+
+        <!-- Preview Panel -->
+        <div class="lg:col-span-2 bg-slate-800/60 backdrop-blur-sm rounded-2xl p-5 sm:p-6 border border-slate-700/50 shadow-xl flex flex-col">
+          <h2 class="text-lg font-semibold mb-5 flex items-center gap-2 text-slate-200">
+            <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            Preview
+          </h2>
+          
+          <div class="flex-1 flex items-center justify-center min-h-[280px]">
+            <div class="qr-preview-box rounded-2xl p-6 shadow-2xl shadow-black/30">
+              <div id="qrContainer" class="w-[260px] h-[260px] flex items-center justify-center"></div>
+            </div>
+          </div>
+          
+          <div class="mt-4 text-center">
+            <p class="text-xs text-slate-500">
+              <span id="qrDataPreview" class="font-mono text-slate-400 break-all">https://github.com</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== SCAN SECTION ==================== -->
+    <section id="scanSection" class="hidden animate-slide-up" style="animation-delay: 0.15s">
+      
+      <!-- Scan Mode Toggle -->
+      <div class="flex justify-center mb-6">
+        <div class="bg-slate-800/60 backdrop-blur-sm p-1 rounded-xl inline-flex border border-slate-700/50">
+          <button id="scanModeCamera" onclick="setScanMode('camera')" class="tab-active px-5 py-2 rounded-lg font-semibold text-sm transition-all-300 flex items-center gap-2 btn-press">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+            Camera
+          </button>
+          <button id="scanModeFile" onclick="setScanMode('file')" class="px-5 py-2 rounded-lg font-semibold text-sm text-slate-400 hover:text-slate-200 transition-all-300 flex items-center gap-2 btn-press">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M18 13.5V6.75A2.25 2.25 0 0015.75 4.5H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25h4.5"/>
+            </svg>
+            Upload File
+          </button>
+        </div>
+      </div>
+
+      <div class="max-w-2xl mx-auto">
+        
+        <!-- Camera Scan -->
+        <div id="cameraScanPanel" class="bg-slate-800/60 backdrop-blur-sm rounded-2xl p-5 sm:p-6 border border-slate-700/50 shadow-xl">
+          <div class="text-center">
+            <!-- Camera Container -->
+            <div class="relative mx-auto max-w-sm aspect-square bg-slate-900 rounded-2xl overflow-hidden mb-5 border border-slate-700 shadow-inner">
+              <div id="cameraPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 z-10">
+                <svg class="w-14 h-14 mb-3 opacity-50" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 22V12h6v10"/>
+                </svg>
+                <p class="text-sm">Camera is off</p>
+              </div>
+              <div id="reader" class="w-full h-full relative z-0"></div>
+              <!-- Scan line animation (shown when camera active) -->
+              <div id="scanLine" class="scan-line hidden z-20"></div>
+            </div>
+            
+            <!-- Camera Controls -->
+            <button 
+              id="cameraToggleBtn" 
+              onclick="toggleCamera()" 
+              class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-8 rounded-xl transition-all-300 btn-press shadow-lg shadow-indigo-600/20"
+            >
+              <svg id="cameraBtnIcon" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+              </svg>
+              <span id="cameraBtnText">Start Camera</span>
+            </button>
+            <p class="text-xs text-slate-500 mt-3">Camera access is required. No video leaves your device.</p>
+          </div>
+        </div>
+
+        <!-- File Scan -->
+        <div id="fileScanPanel" class="hidden bg-slate-800/60 backdrop-blur-sm rounded-2xl p-5 sm:p-6 border border-slate-700/50 shadow-xl">
+          <!-- Drop Zone -->
+          <div 
+            id="dropZone"
+            class="drop-zone rounded-xl p-10 text-center cursor-pointer mb-5 group"
+            onclick="document.getElementById('fileInput').click()"
+            ondragover="handleDragOver(event)"
+            ondragleave="handleDragLeave(event)"
+            ondrop="handleDrop(event)"
+          >
+            <input type="file" id="fileInput" accept="image/*" class="sr-only" onchange="handleFileSelect(event)">
+            <div class="transition-transform group-hover:scale-105">
+              <svg class="mx-auto h-12 w-12 text-slate-500 mb-3 group-hover:text-indigo-400 transition-colors" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l-3 3m3-3l3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"/>
+              </svg>
+              <p class="text-base font-medium text-slate-300 mb-1 group-hover:text-white transition-colors">Drop image here or click to browse</p>
+              <p class="text-sm text-slate-500">PNG, JPG, GIF, WEBP, BMP</p>
+            </div>
+          </div>
+          
+          <!-- File Preview -->
+          <div id="filePreviewContainer" class="hidden mb-5">
+            <div class="relative inline-block">
+              <img id="filePreview" class="mx-auto max-h-64 rounded-xl shadow-lg border border-slate-700" alt="Uploaded image">
+              <button onclick="clearFileScan()" class="absolute -top-2 -right-2 bg-rose-500 hover:bg-rose-600 text-white rounded-full p-1.5 shadow-lg transition-all-300 hover:scale-110">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Hidden element for html5-qrcode file scanning -->
+          <div id="fileScanHidden" class="hidden"></div>
+        </div>
+
+        <!-- Scan Result -->
+        <div id="scanResult" class="hidden mt-5 bg-slate-800/80 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/50 shadow-xl animate-slide-up">
+          <h3 class="text-base font-semibold mb-3 flex items-center gap-2 text-slate-200">
+            <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Scan Result
+          </h3>
+          <div class="bg-slate-900/80 rounded-xl p-4 mb-4 border border-slate-700/50">
+            <p id="resultText" class="text-slate-200 break-all font-mono text-sm leading-relaxed"></p>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <button onclick="copyResult()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 px-5 rounded-xl transition-all-300 flex items-center gap-2 btn-press shadow-lg shadow-indigo-600/20">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5"/>
+              </svg>
+              Copy to Clipboard
+            </button>
+            <a 
+              id="resultLink" 
+              href="#" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              class="hidden bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-5 rounded-xl transition-all-300 flex items-center gap-2 btn-press shadow-lg shadow-emerald-600/20"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>
+              </svg>
+              Open Link
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="mt-12 text-center text-slate-600 text-xs">
+      <p>Privacy-first. No data is ever sent to any server. All processing happens locally in your browser.</p>
+    </footer>
+  </div>
+
+  <!-- ==================== JAVASCRIPT ==================== -->
+  <script>
+    // =====================================================
+    // GLOBAL STATE
+    // =====================================================
+    let qrCodeInstance = null;
+    let logoDataUrl = null;
+    let html5QrCodeCamera = null;
+    let isCameraRunning = false;
+    let lastScanResult = '';
+    let fileScanner = null;
+
+    // =====================================================
+    // INITIALIZATION
+    // =====================================================
+    document.addEventListener('DOMContentLoaded', () => {
+      // Check libraries loaded
+      if (typeof QRCodeStyling === 'undefined') {
+        showToast('QR Code library failed to load. Please refresh.', 'error');
+        return;
+      }
+      if (typeof Html5Qrcode === 'undefined') {
+        showToast('Scanner library failed to load. Please refresh.', 'error');
+        return;
+      }
+      
+      initQRCode();
+      setupInputListeners();
+    });
+
+    // =====================================================
+    // TOAST NOTIFICATIONS
+    // =====================================================
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      
+      const colors = {
+        success: 'bg-emerald-500',
+        error: 'bg-rose-500',
+        info: 'bg-indigo-500'
+      };
+      
+      const icons = {
+        success: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+        error: 'M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+        info: 'M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z'
+      };
+      
+      toast.className = `toast ${colors[type]} text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 min-w-[240px] pointer-events-auto backdrop-blur-sm`;
+      toast.innerHTML = `
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="${icons[type]}"/>
+        </svg>
+        <span class="font-medium text-sm">${message}</span>
+      `;
+      
+      container.appendChild(toast);
+      requestAnimationFrame(() => toast.classList.add('show'));
+      
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 400);
+      }, 3200);
+    }
+
+    // =====================================================
+    // TAB SWITCHING
+    // =====================================================
+    function switchTab(tab) {
+      const genSection = document.getElementById('generateSection');
+      const scanSection = document.getElementById('scanSection');
+      const genTab = document.getElementById('tabGenerate');
+      const scanTab = document.getElementById('tabScan');
+
+      if (tab === 'generate') {
+        genSection.classList.remove('hidden');
+        scanSection.classList.add('hidden');
+        genTab.classList.add('tab-active');
+        genTab.classList.remove('text-slate-400');
+        scanTab.classList.remove('tab-active');
+        scanTab.classList.add('text-slate-400');
+        stopCamera();
+      } else {
+        genSection.classList.add('hidden');
+        scanSection.classList.remove('hidden');
+        scanTab.classList.add('tab-active');
+        scanTab.classList.remove('text-slate-400');
+        genTab.classList.remove('tab-active');
+        genTab.classList.add('text-slate-400');
+      }
+    }
+
+    // =====================================================
+    // QR CODE GENERATOR
+    // =====================================================
+    function initQRCode() {
+      updateQRCode();
+    }
+
+    function updateQRCode() {
+      const container = document.getElementById('qrContainer');
+      container.innerHTML = '';
+      
+      const text = document.getElementById('qrText').value.trim() || 'https://example.com';
+      const dotColor = document.getElementById('dotColor').value;
+      const bgColor = document.getElementById('bgColor').value;
+      const margin = parseInt(document.getElementById('marginSize').value) || 0;
+
+      // Update preview text
+      const previewEl = document.getElementById('qrDataPreview');
+      previewEl.textContent = text.length > 50 ? text.substring(0, 50) + '...' : text;
+
+      qrCodeInstance = new QRCodeStyling({
+        width: 260,
+        height: 260,
+        type: 'svg',
+        data: text,
+        image: logoDataUrl,
+        margin: margin,
+        qrOptions: {
+          typeNumber: 0,
+          mode: 'Byte',
+          errorCorrectionLevel: 'H'
+        },
+        dotsOptions: {
+          color: dotColor,
+          type: 'rounded'
+        },
+        backgroundOptions: {
+          color: bgColor
+        },
+        imageOptions: {
+          crossOrigin: 'anonymous',
+          margin: 4,
+          imageSize: 0.25
+        }
+      });
+
+      qrCodeInstance.append(container);
+    }
+
+    function setupInputListeners() {
+      document.getElementById('qrText').addEventListener('input', debounce(updateQRCode, 150));
+    }
+
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
+
+    function updateColorLabel(inputId, labelId) {
+      document.getElementById(labelId).textContent = document.getElementById(inputId).value;
+    }
+
+    function clearText() {
+      document.getElementById('qrText').value = '';
+      updateQRCode();
+      showToast('Text cleared', 'info');
+    }
+
+    // =====================================================
+    // LOGO UPLOAD
+    // =====================================================
+    function handleLogoUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      if (!file.type.startsWith('image/')) {
+        showToast('Please upload a valid image file', 'error');
+        return;
+      }
+
+      if (file.size > 2 * 1024 * 1024) {
+        showToast('Logo should be under 2MB', 'error');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        logoDataUrl = e.target.result;
+        const preview = document.getElementById('logoPreview');
+        preview.src = logoDataUrl;
+        preview.classList.remove('hidden');
+        document.getElementById('logoPlaceholder').classList.add('hidden');
+        document.getElementById('removeLogoBtn').classList.remove('hidden');
+        updateQRCode();
+        showToast('Logo added successfully');
+      };
+      reader.onerror = () => showToast('Failed to read logo file', 'error');
+      reader.readAsDataURL(file);
+    }
+
+    function removeLogo() {
+      logoDataUrl = null;
+      document.getElementById('logoUpload').value = '';
+      document.getElementById('logoPreview').classList.add('hidden');
+      document.getElementById('logoPreview').src = '';
+      document.getElementById('logoPlaceholder').classList.remove('hidden');
+      document.getElementById('removeLogoBtn').classList.add('hidden');
+      updateQRCode();
+      showToast('Logo removed', 'info');
+    }
+
+    // =====================================================
+    // DOWNLOAD QR CODE
+    // =====================================================
+    function downloadQR(format) {
+      if (!qrCodeInstance) {
+        showToast('Generate a QR code first', 'error');
+        return;
+      }
+      
+      const text = document.getElementById('qrText').value.trim() || 'qr-code';
+      let filename = text
+        .replace(/^https?:\/\//, '')
+        .replace(/[^a-z0-9]/gi, '-')
+        .toLowerCase()
+        .substring(0, 40) || 'qr-code';
+      
+      // Remove trailing dashes
+      filename = filename.replace(/-+$/, '') || 'qr-code';
+      
+      qrCodeInstance.download({
+        name: filename,
+        extension: format
+      });
+      
+      showToast(`Downloading ${format.toUpperCase()}...`);
+    }
+
+    // =====================================================
+    // SCAN MODE SWITCHING
+    // =====================================================
+    function setScanMode(mode) {
+      const camBtn = document.getElementById('scanModeCamera');
+      const fileBtn = document.getElementById('scanModeFile');
+      const camPanel = document.getElementById('cameraScanPanel');
+      const filePanel = document.getElementById('fileScanPanel');
+
+      if (mode === 'camera') {
+        camBtn.classList.add('tab-active');
+        camBtn.classList.remove('text-slate-400');
+        fileBtn.classList.remove('tab-active');
+        fileBtn.classList.add('text-slate-400');
+        camPanel.classList.remove('hidden');
+        filePanel.classList.add('hidden');
+      } else {
+        fileBtn.classList.add('tab-active');
+        fileBtn.classList.remove('text-slate-400');
+        camBtn.classList.remove('tab-active');
+        camBtn.classList.add('text-slate-400');
+        camPanel.classList.add('hidden');
+        filePanel.classList.remove('hidden');
+        stopCamera();
+      }
+    }
+
+    // =====================================================
+    // CAMERA SCANNING
+    // =====================================================
+    async function toggleCamera() {
+      if (isCameraRunning) {
+        stopCamera();
+      } else {
+        await startCamera();
+      }
+    }
+
+    async function startCamera() {
+      const btn = document.getElementById('cameraToggleBtn');
+      const btnText = document.getElementById('cameraBtnText');
+      const btnIcon = document.getElementById('cameraBtnIcon');
+      const placeholder = document.getElementById('cameraPlaceholder');
+      const scanLine = document.getElementById('scanLine');
+
+      try {
+        // Request camera permission and get devices
+        const devices = await Html5Qrcode.getCameras();
+        
+        if (!devices || devices.length === 0) {
+          showToast('No camera found on this device', 'error');
+          return;
+        }
+
+        // Prefer back camera, fallback to first available
+        const cameraId = devices.find(d => d.label.toLowerCase().includes('back'))?.id 
+                      || devices[devices.length - 1].id;
+
+        html5QrCodeCamera = new Html5Qrcode('reader');
+
+        await html5QrCodeCamera.start(
+          cameraId,
+          {
+            fps: 10,
+            qrbox: { width: 220, height: 220 },
+            aspectRatio: 1.0
+          },
+          onCameraScanSuccess,
+          onCameraScanFailure
+        );
+
+        isCameraRunning = true;
+        placeholder.classList.add('hidden');
+        scanLine.classList.remove('hidden');
+        
+        btnText.textContent = 'Stop Camera';
+        btn.classList.remove('bg-indigo-600', 'hover:bg-indigo-500', 'shadow-indigo-600/20');
+        btn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-600/20');
+        
+        btnIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5" />';
+        
+      } catch (err) {
+        console.error('Camera error:', err);
+        let msg = 'Camera access denied or unavailable';
+        if (err.name === 'NotAllowedError') msg = 'Camera permission denied. Please allow access.';
+        else if (err.name === 'NotFoundError') msg = 'No camera found.';
+        showToast(msg, 'error');
+      }
+    }
+
+    function stopCamera() {
+      if (!html5QrCodeCamera || !isCameraRunning) return;
+
+      const btn = document.getElementById('cameraToggleBtn');
+      const btnText = document.getElementById('cameraBtnText');
+      const btnIcon = document.getElementById('cameraBtnIcon');
+      const placeholder = document.getElementById('cameraPlaceholder');
+      const scanLine = document.getElementById('scanLine');
+
+      html5QrCodeCamera.stop().then(() => {
+        isCameraRunning = false;
+        placeholder.classList.remove('hidden');
+        scanLine.classList.add('hidden');
+        
+        btnText.textContent = 'Start Camera';
+        btn.classList.add('bg-indigo-600', 'hover:bg-indigo-500', 'shadow-indigo-600/20');
+        btn.classList.remove('bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-600/20');
+        
+        btnIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />';
+        
+        html5QrCodeCamera.clear();
+        html5QrCodeCamera = null;
+      }).catch(err => {
+        console.error('Error stopping camera:', err);
+      });
+    }
+
+    function onCameraScanSuccess(decodedText, decodedResult) {
+      displayScanResult(decodedText);
+      // Optional: auto-stop camera after successful scan
+      // stopCamera();
+    }
+
+    function onCameraScanFailure(error) {
+      // This fires continuously when no QR is in view — completely normal
+      // No action needed
+    }
+
+    // =====================================================
+    // FILE SCANNING (Drag & Drop + Select)
+    // =====================================================
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('dropZone').classList.add('dragover');
+    }
+
+    function handleDragLeave(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('dropZone').classList.remove('dragover');
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('dropZone').classList.remove('dragover');
+      
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        processImageFile(files[0]);
+      }
+    }
+
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (file) {
+        processImageFile(file);
+      }
+    }
+
+    function processImageFile(file) {
+      if (!file.type.startsWith('image/')) {
+        showToast('Please upload a valid image file', 'error');
+        return;
+      }
+
+      // Show preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('filePreview').src = e.target.result;
+        document.getElementById('filePreviewContainer').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+
+      // Scan using html5-qrcode
+      if (!fileScanner) {
+        fileScanner = new Html5Qrcode('fileScanHidden');
+      }
+
+      fileScanner.scanFile(file, false)
+        .then(decodedText => {
+          displayScanResult(decodedText);
+        })
+        .catch(err => {
+          console.error('File scan error:', err);
+          showToast('No QR code found in this image', 'error');
+        });
+    }
+
+    function clearFileScan() {
+      document.getElementById('fileInput').value = '';
+      document.getElementById('filePreview').src = '';
+      document.getElementById('filePreviewContainer').classList.add('hidden');
+      document.getElementById('scanResult').classList.add('hidden');
+    }
+
+    // =====================================================
+    // SCAN RESULT DISPLAY
+    // =====================================================
+    function displayScanResult(text) {
+      lastScanResult = text;
+      document.getElementById('resultText').textContent = text;
+      document.getElementById('scanResult').classList.remove('hidden');
+      
+      const linkBtn = document.getElementById('resultLink');
+      if (isValidURL(text)) {
+        linkBtn.href = text;
+        linkBtn.classList.remove('hidden');
+      } else {
+        linkBtn.classList.add('hidden');
+      }
+      
+      // Scroll to result
+      document.getElementById('scanResult').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      
+      showToast('QR code scanned successfully!');
+    }
+
+    function isValidURL(string) {
+      try {
+        const url = new URL(string);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function copyResult() {
+      if (!lastScanResult) return;
+      
+      navigator.clipboard.writeText(lastScanResult)
+        .then(() => showToast('Copied to clipboard!'))
+        .catch(() => {
+          // Fallback for older browsers
+          const textarea = document.createElement('textarea');
+          textarea.value = lastScanResult;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          try {
+            document.execCommand('copy');
+            showToast('Copied to clipboard!');
+          } catch (err) {
+            showToast('Failed to copy', 'error');
+          }
+          document.body.removeChild(textarea);
+        });
+    }
+
+    // =====================================================
+    // KEYBOARD SHORTCUTS
+    // =====================================================
+    document.addEventListener('keydown', (e) => {
+      // Ctrl/Cmd + Enter to download PNG
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const genSection = document.getElementById('generateSection');
+        if (!genSection.classList.contains('hidden')) {
+          e.preventDefault();
+          downloadQR('png');
+        }
+      }
+    });
+  </script>
+</body>
+</html>
