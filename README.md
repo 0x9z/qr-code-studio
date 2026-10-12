@@ -1,5 +1,7 @@
 # QR Code Studio
 
+![img](scanner.png)
+
 A privacy-first QR Code Generator and Scanner.
 Everything runs in your browser — no server, no tracking.
 
